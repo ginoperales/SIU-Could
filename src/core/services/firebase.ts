@@ -23,7 +23,7 @@ import {
   signInWithPopup,
   signOut
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, updateDoc, deleteDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAuw148ajLVFEz_YBAVMHIEi96RSjVrtqU",
@@ -723,6 +723,23 @@ export const authService = {
   getCurrentCompany: async (): Promise<Empresa | null> => {
     const session = authService.getCurrentSession();
     if (!session) return null;
+    
+    try {
+      const compDoc = await getDoc(doc(db, 'empresas', session.empresaId));
+      if (compDoc.exists()) {
+        const companyData = compDoc.data() as Empresa;
+        
+        const companies = storageEngine.getCollection<Empresa>('empresas');
+        const otherCompanies = companies.filter(c => c.id !== session.empresaId);
+        otherCompanies.push(companyData);
+        storageEngine.saveCollection('empresas', otherCompanies);
+        
+        return companyData;
+      }
+    } catch (err) {
+      console.warn('Could not fetch company from Cloud Firestore, using LocalStorage:', err);
+    }
+    
     const companies = storageEngine.getCollection<Empresa>('empresas');
     return companies.find(c => c.id === session.empresaId) || null;
   },
@@ -737,6 +754,31 @@ export const authService = {
       const userDoc = await getDoc(doc(db, 'usuarios', uid));
       if (userDoc.exists()) {
         const userData = userDoc.data() as Usuario;
+        
+        // Sync user to LocalStorage
+        const users = storageEngine.getCollection<Usuario>('usuarios');
+        const otherUsers = users.filter(u => u.id !== uid);
+        otherUsers.push(userData);
+        storageEngine.saveCollection('usuarios', otherUsers);
+        
+        // Fetch company from Firestore and save to LocalStorage
+        try {
+          const compDoc = await getDoc(doc(db, 'empresas', userData.empresaId));
+          if (compDoc.exists()) {
+            const companyData = compDoc.data() as Empresa;
+            const companies = storageEngine.getCollection<Empresa>('empresas');
+            const otherCompanies = companies.filter(c => c.id !== userData.empresaId);
+            otherCompanies.push(companyData);
+            storageEngine.saveCollection('empresas', otherCompanies);
+          }
+        } catch (compErr) {
+          console.warn('Failed to sync company during login:', compErr);
+        }
+
+        // Trigger background sync of all tenant documents
+        dbService.syncFromCloudFirestore(userData.empresaId).catch(console.error);
+        dbService.syncGlobalCollections().catch(console.error);
+
         localStorage.setItem('sv_auth_session', JSON.stringify({
           uid: userData.id,
           empresaId: userData.empresaId
@@ -834,6 +876,31 @@ export const authService = {
       const userDoc = await getDoc(doc(db, 'usuarios', uid));
       if (userDoc.exists()) {
         const userData = userDoc.data() as Usuario;
+        
+        // Sync user to LocalStorage
+        const users = storageEngine.getCollection<Usuario>('usuarios');
+        const otherUsers = users.filter(u => u.id !== uid);
+        otherUsers.push(userData);
+        storageEngine.saveCollection('usuarios', otherUsers);
+        
+        // Fetch company from Firestore and save to LocalStorage
+        try {
+          const compDoc = await getDoc(doc(db, 'empresas', userData.empresaId));
+          if (compDoc.exists()) {
+            const companyData = compDoc.data() as Empresa;
+            const companies = storageEngine.getCollection<Empresa>('empresas');
+            const otherCompanies = companies.filter(c => c.id !== userData.empresaId);
+            otherCompanies.push(companyData);
+            storageEngine.saveCollection('empresas', otherCompanies);
+          }
+        } catch (compErr) {
+          console.warn('Failed to sync company during Google login:', compErr);
+        }
+
+        // Trigger background sync of all tenant documents
+        dbService.syncFromCloudFirestore(userData.empresaId).catch(console.error);
+        dbService.syncGlobalCollections().catch(console.error);
+
         localStorage.setItem('sv_auth_session', JSON.stringify({
           uid: userData.id,
           empresaId: userData.empresaId
@@ -1223,6 +1290,61 @@ export const dbService = {
         } catch (err) {
           console.error(`Error syncing doc ${docData.id} to firestore:`, err);
         }
+      }
+    }
+  },
+
+  syncFromCloudFirestore: async (empresaId: string): Promise<void> => {
+    if (!empresaId) return;
+    const collections = [
+      'clientes', 
+      'proveedores', 
+      'movimientos', 
+      'facturas', 
+      'compras', 
+      'bancos', 
+      'productos', 
+      'kardex', 
+      'trabajadores'
+    ];
+    
+    for (const coll of collections) {
+      try {
+        const q = query(collection(db, coll), where('empresaId', '==', empresaId));
+        const querySnapshot = await getDocs(q);
+        const docsList: any[] = [];
+        querySnapshot.forEach((doc) => {
+          docsList.push(doc.data());
+        });
+        
+        if (docsList.length > 0) {
+          const localList = storageEngine.getCollection<any>(coll);
+          const otherCompaniesDocs = localList.filter(item => item.empresaId !== empresaId);
+          const merged = [...otherCompaniesDocs, ...docsList];
+          storageEngine.saveCollection(coll, merged);
+          console.log(`[Sync] Synced ${docsList.length} docs from Cloud Firestore for collection: ${coll}`);
+        }
+      } catch (err) {
+        console.warn(`[Sync Warning] Failed to sync ${coll} from cloud:`, err);
+      }
+    }
+  },
+
+  syncGlobalCollections: async (): Promise<void> => {
+    const globals = ['promociones', 'funcionalidades'];
+    for (const coll of globals) {
+      try {
+        const querySnapshot = await getDocs(collection(db, coll));
+        const docsList: any[] = [];
+        querySnapshot.forEach((doc) => {
+          docsList.push(doc.data());
+        });
+        if (docsList.length > 0) {
+          storageEngine.saveCollection(coll, docsList);
+          console.log(`[Sync] Synced ${docsList.length} global docs for: ${coll}`);
+        }
+      } catch (err) {
+        console.warn(`[Sync Warning] Failed to sync global ${coll}:`, err);
       }
     }
   },

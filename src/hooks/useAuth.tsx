@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Usuario } from '../core/models/types';
-import { authService } from '../core/services/firebase';
+import { authService, dbService } from '../core/services/firebase';
 
 interface AuthContextType {
   user: Usuario | null;
@@ -36,6 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const currentUser = await authService.getCurrentUser();
       setUser(currentUser);
+      
+      if (currentUser) {
+        // Sync company in background
+        authService.getCurrentCompany().catch(err => {
+          console.warn('Failed to sync company on session fetch:', err);
+        });
+        // Sync other tenant collections in background
+        dbService.syncFromCloudFirestore(currentUser.empresaId).catch(err => {
+          console.warn('Failed to sync collections on session fetch:', err);
+        });
+        dbService.syncGlobalCollections().catch(err => {
+          console.warn('Failed to sync globals on session fetch:', err);
+        });
+      }
     } catch (err) {
       console.error('Error fetching auth session:', err);
       setUser(null);
