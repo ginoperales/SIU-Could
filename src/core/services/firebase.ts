@@ -1303,8 +1303,12 @@ export const dbService = {
 // ==========================================
 export const bootstrapSuperAdmin = async () => {
   if (typeof window === 'undefined') return;
+  
   const alreadyBootstrapped = localStorage.getItem('contacould_bootstrapped_admin_v3');
-  if (alreadyBootstrapped) return;
+  const users = storageEngine.getCollection<Usuario>('usuarios');
+  const hasGin = users.some(u => u.email.toLowerCase() === 'gin.zu.ken@gmail.com');
+  
+  if (alreadyBootstrapped && hasGin) return;
   
   try {
     // Clear demo session on first load to force real logins
@@ -1355,14 +1359,6 @@ export const bootstrapSuperAdmin = async () => {
       fechaRegistro: new Date().toISOString()
     };
     
-    await setDoc(doc(db, 'empresas', masterCompanyId), masterCompany);
-    await setDoc(doc(db, 'usuarios', uidGin), superAdminUser);
-    
-    const users = storageEngine.getCollection<Usuario>('usuarios');
-    if (!users.some(u => u.email.toLowerCase() === emailGin.toLowerCase())) {
-      users.push(superAdminUser);
-    }
-
     // 2. Bootstrap Harold Admin
     const emailHarold = 'harold.20guerra17@gmail.com';
     const passHarold = 'harold2026';
@@ -1393,16 +1389,27 @@ export const bootstrapSuperAdmin = async () => {
       fechaRegistro: new Date().toISOString()
     };
     
-    await setDoc(doc(db, 'usuarios', uidHarold), haroldUser);
-    
+    // 3. Save to Local Storage FIRST to ensure immediate offline compatibility
+    if (!users.some(u => u.email.toLowerCase() === emailGin.toLowerCase())) {
+      users.push(superAdminUser);
+    }
     if (!users.some(u => u.email.toLowerCase() === emailHarold.toLowerCase())) {
       users.push(haroldUser);
     }
-    
     storageEngine.saveCollection('usuarios', users);
     
+    // 4. Silent sync to Cloud Firestore (prevents crashes from regional or rule restrictions)
+    try {
+      await setDoc(doc(db, 'empresas', masterCompanyId), masterCompany);
+      await setDoc(doc(db, 'usuarios', uidGin), superAdminUser);
+      await setDoc(doc(db, 'usuarios', uidHarold), haroldUser);
+      console.log('[Bootstrap] Successfully synced super admins to cloud.');
+    } catch (fsErr) {
+      console.warn('[Bootstrap Cloud Sync Warning] Could not write bootstrap users to cloud:', fsErr);
+    }
+    
     localStorage.setItem('contacould_bootstrapped_admin_v3', 'true');
-    console.log('[Bootstrap] Admin users registered successfully in Auth & Firestore!');
+    console.log('[Bootstrap] Admin users registered successfully in Local Storage!');
   } catch (err) {
     console.warn('[Bootstrap Warning] Could not register admins automatically:', err);
   }
