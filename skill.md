@@ -41,3 +41,51 @@ Este archivo registra el avance técnico, el diseño de arquitectura y el compor
 | 2026-06-01 | `firebase.ts` | Configuración de estado activo y funcionalidades por defecto al registrar por consola de Super Admin. | ¡Completado! |
 | 2026-06-01 | `page.tsx` | Diseño e integración del banner premium de aviso de Modo Lectura e interacción con soporte. | ¡Completado! |
 | 2026-06-01 | `superadmin.tsx` | Creación de la bandeja interactiva de solicitudes y notificaciones para validación y activación ágil de tenants. | ¡Completado! |
+
+---
+
+# Skill: Puesta a Cero Contable y Saldos Iniciales en Cero
+
+Este archivo registra el avance técnico, diseño de arquitectura y especificaciones del sistema de puesta a cero contable (base de datos limpia) e inicialización estricta de saldos en cero.
+
+---
+
+## 🛠️ Especificaciones de Arquitectura
+
+### 1. Inicialización de Saldos en Cero
+- **Seeding de Cuenta BCP**: Anteriormente, las empresas creadas iniciaban sin banco o con un saldo de simulación de S/. 5,000.00. Ahora se configuró de forma estricta el saldo inicial de la cuenta corriente BCP predeterminada a exactamente **`S/. 0.00`** en los tres flujos de creación del sistema:
+  1. Auto-registro público (`authService.register`).
+  2. Registro directo por Super Administrador (`dbService.createCompanyAndAdmin`).
+  3. Creación interna de empresa en el dashboard principal (`handleAddCompany`).
+- **Inclusión de CCI**: Adicionalmente, se incluyó el código de cuenta interbancario (CCI) peruano estructurado automáticamente para todas las cuentas iniciales.
+
+### 2. Purga y Reseteo Contable en Base de Datos (`resetCompanyData`)
+- Se implementó la utilidad transaccional `dbService.resetCompanyData(empresaId)` para:
+  - **Filtro de Seguridad**: Bloquear de forma irreversible cualquier intento de reinicio sobre la empresa demo principal RUC `20601234567` (Inversiones Perú S.A.C.) para conservar intactos los datos de demostración del sistema.
+  - **Purgado de Datos**: Eliminar permanentemente todos los documentos de las colecciones transaccionales: `clientes`, `proveedores`, `movimientos`, `facturas`, `compras`, `productos`, `kardex` y `trabajadores` en LocalStorage y Cloud Firestore.
+  - **Reseteo Bancario**: Conservar las cuentas corrientes configuradas del tenant, pero restableciendo su `saldoActual` a exactamente **`0.00`** PEN tanto de forma local como en Firestore.
+
+### 3. Panel de Control de Puesta a Cero en Configuración (`configuracion.tsx`)
+- Se diseñó e integró la subpestaña **"Puesta a Cero"** en el panel de Configuración de la Empresa.
+- Renderiza un panel premium de peligro destacado rojo explicativo con un listado detallado de todas las colecciones contables que serán eliminadas.
+- Solicita al usuario autenticado (con privilegios de Administrador o Super Administrador) escribir de forma explícita el RUC de su propia empresa para autorizar y desbloquear el botón de restablecimiento.
+- Tras la confirmación, purga la base de datos local y en la nube, y fuerza una recarga total limpia del ERP.
+
+### 4. Control Directo de Puesta a Cero para el Super Admin (`superadmin.tsx`)
+- Se integró un control directo e interactivo de **"Puesta a Cero"** dentro del Directorio de Tenants en la consola de control del Super Administrador.
+- Deshabilita el botón de manera nativa si el tenant corresponde a la empresa demo para evitar accidentes.
+- Abre un modal premium de confirmación de alto riesgo que requiere ingresar manualmente el RUC del tenant objetivo para confirmar la purga remota de sus libros contables.
+
+---
+
+## 📈 Registro de Avance e Implementación
+
+| Fecha / Hora | Componente | Acción Realizada | Estado |
+| :--- | :--- | :--- | :--- |
+| 2026-06-01 | `firebase.ts` | Configuración de saldos a S/. 0.00 con CCI estructurado en `register` y `createCompanyAndAdmin`. | ¡Completado! |
+| 2026-06-01 | `dashboard.tsx` | Ajuste de saldo inicial de cuenta corriente BCP a S/. 0.00 con CCI dinámico en `handleAddCompany`. | ¡Completado! |
+| 2026-06-01 | `firebase.ts` | Implementación del método centralizado `dbService.resetCompanyData` con bypass de validación y purga local/cloud. | ¡Completado! |
+| 2026-06-01 | `configuracion.tsx` | Diseño e integración del panel de Puesta a Cero y modal de confirmación por RUC. | ¡Completado! |
+| 2026-06-01 | `superadmin.tsx` | Integración de botón en directorio y modal premium de reinicio con validación de RUC de la empresa objetivo. | ¡Completado! |
+| 2026-06-01 | `skill.md` | Registro y consolidación histórica de la arquitectura de reinicio y saldos en cero. | ¡Completado! |
+

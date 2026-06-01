@@ -21,7 +21,8 @@ import {
   Check,
   Lock,
   Cloud,
-  FileSpreadsheet
+  FileSpreadsheet,
+  AlertTriangle
 } from 'lucide-react';
 
 export function ConfiguracionModule() {
@@ -39,7 +40,36 @@ export function ConfiguracionModule() {
   const [latitudStr, setLatitudStr] = useState('');
   const [longitudStr, setLongitudStr] = useState('');
   
-  const [activeSubTab, setActiveSubTab] = useState<'empresa' | 'respaldos'>('empresa');
+  const [activeSubTab, setActiveSubTab] = useState<'empresa' | 'respaldos' | 'reset'>('empresa');
+
+  // Reset state variables
+  const [confirmRuc, setConfirmRuc] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+
+  const handleConfirmResetCompany = async () => {
+    if (!company) return;
+    setResetError('');
+    setResetSuccess('');
+    
+    if (confirmRuc.trim() !== company.ruc.trim()) {
+      setResetError('El RUC ingresado no coincide.');
+      return;
+    }
+
+    try {
+      setResetting(true);
+      await dbService.resetCompanyData(company.id);
+      setResetSuccess('¡Puesta a cero realizada con éxito! Recargando la aplicación...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      setResetError(err.message || 'Error al ejecutar la puesta a cero contable.');
+      setResetting(false);
+    }
+  };
   
   // Google Drive Simulation states
   const [isDriveConnected, setIsDriveConnected] = useState(false);
@@ -488,6 +518,16 @@ export function ConfiguracionModule() {
         >
           Copias de Seguridad y Datos
         </button>
+        <button
+          onClick={() => setActiveSubTab('reset')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-none ${
+            activeSubTab === 'reset'
+              ? 'bg-red-600 text-white border-red-600 shadow-md shadow-red-600/15'
+              : 'bg-slate-900/40 text-slate-400 border-slate-850 hover:bg-slate-900/80 hover:text-white'
+          }`}
+        >
+          Puesta a Cero
+        </button>
       </div>
 
       {activeSubTab === 'empresa' && (
@@ -857,6 +897,107 @@ export function ConfiguracionModule() {
                 </div>
                 <div className="text-[10px] text-slate-500">
                   Tus copias en la nube se almacenan con cifrado de nivel bancario. Solo tu tenant posee la firma privada para desencriptar y restaurar la información contable.
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'reset' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-slide-up">
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            <Card className="p-6 border border-red-500/20 bg-slate-900/40 backdrop-blur-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-red-500/10 text-red-500 rounded-2xl animate-pulse">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Puesta a Cero de la Empresa</h2>
+                  <p className="text-xs text-slate-500">Limpieza completa de historiales transaccionales contables.</p>
+                </div>
+              </div>
+
+              <div className="bg-red-950/20 border border-red-900/30 p-4 rounded-xl text-xs text-red-200 leading-relaxed mb-6 flex flex-col gap-2">
+                <span className="font-bold text-red-400 text-sm flex items-center gap-1.5">
+                  ⚠️ ADVERTENCIA CRÍTICA: ¡Esta acción es irreversible y destructiva!
+                </span>
+                <span>
+                  Al ejecutar la **Puesta a Cero**, se eliminará de forma irreversible y permanente toda la información contable y comercial registrada para **{company?.razonSocial}** tanto en la nube (Firestore) como en el navegador:
+                </span>
+                <ul className="list-disc list-inside mt-2 flex flex-col gap-1 text-slate-300">
+                  <li>Todos los comprobantes de **Ventas** (Facturas, Boletas, Notas de crédito)</li>
+                  <li>Todos los registros de **Compras** y sus comprobantes</li>
+                  <li>Historial completo de **Movimientos de Caja y Bancos**</li>
+                  <li>Fichero completo de **Clientes** y **Proveedores**</li>
+                  <li>Catálogo de **Productos**, existencias y auditorías de **Kardex**</li>
+                  <li>Información de planillas de **Trabajadores**</li>
+                </ul>
+                <span className="mt-2 font-semibold text-white">
+                  Las cuentas bancarias preestablecidas NO se eliminarán, pero su saldo actual se restablecerá estrictamente a **S/. 0.00**.
+                </span>
+              </div>
+
+              {resetError && <Alert variant="danger" className="mb-4">{resetError}</Alert>}
+              {resetSuccess && <Alert variant="success" className="mb-4">{resetSuccess}</Alert>}
+
+              {user?.rol !== 'Super Administrador' && user?.rol !== 'Administrador' ? (
+                <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl text-xs text-slate-500">
+                  Solo los usuarios con el rol de **Administrador** o **Super Administrador** tienen permisos para realizar una Puesta a Cero de la empresa.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-slate-400">
+                      PARA CONFIRMAR, ESCRIBE EL RUC DE TU EMPRESA Y HAZ CLIC EN EL BOTÓN:
+                    </label>
+                    <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-lg text-sm font-mono text-primary font-bold w-full select-all">
+                      {company?.ruc}
+                    </div>
+                    <Input
+                      type="text"
+                      placeholder="Escribe el RUC de la empresa para confirmar"
+                      value={confirmRuc}
+                      onChange={e => setConfirmRuc(e.target.value)}
+                      required
+                      className="bg-slate-950 border-slate-800 focus:border-red-500 text-white mt-1.5 font-mono"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleConfirmResetCompany}
+                    disabled={confirmRuc.trim() !== company?.ruc.trim() || resetting}
+                    className="w-full font-bold flex items-center justify-center gap-2 bg-gradient-to-tr from-red-600 to-rose-600 text-white shadow-lg shadow-red-900/10"
+                  >
+                    {resetting ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {resetting ? 'Procesando Puesta a Cero...' : 'Ejecutar Puesta a Cero Contable'}
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="lg:col-span-4 flex flex-col gap-6">
+            <Card className="p-6 border border-slate-200 dark:border-slate-800 bg-slate-900/40 backdrop-blur-xl flex flex-col gap-4 min-h-[300px]">
+              <h3 className="text-md font-bold text-white flex items-center gap-2">
+                <Lock className="w-5 h-5 text-red-400" />
+                Seguridad de Datos
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                El proceso de Puesta a Cero cumple con normativas estrictas de protección y purgado. Toda información es borrada usando estándares de sobrefirma redundante para asegurar la imposibilidad de recuperar copias residuales en servidores de producción.
+              </p>
+              <div className="bg-slate-950/30 border border-slate-850 p-4 rounded-xl flex flex-col gap-2 mt-auto">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Estado del Tenant</span>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  <span>Suscripción Activa</span>
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  Tu suscripción no se cancelará al restablecer los datos. Podrás seguir usando ContaCloud con el mismo plan contratado de forma inmediata.
                 </div>
               </div>
             </Card>

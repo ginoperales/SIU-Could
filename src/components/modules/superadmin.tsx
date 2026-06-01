@@ -220,6 +220,13 @@ export function SuperAdminModule() {
   const [confirmEmailInput, setConfirmEmailInput] = useState('');
   const [deleteError, setDeleteError] = useState('');
 
+  // Reset Dialog state
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [companyToReset, setCompanyToReset] = useState<Empresa | null>(null);
+  const [confirmRucInput, setConfirmRucInput] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetting, setResetting] = useState(false);
+
   // Edit Dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [companyToEdit, setCompanyToEdit] = useState<Empresa | null>(null);
@@ -485,6 +492,38 @@ export function SuperAdminModule() {
       setDeleteError(err.message || 'Error al eliminar la empresa.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetCompanyDataSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    
+    if (!companyToReset) return;
+    
+    if (confirmRucInput.trim() !== companyToReset.ruc.trim()) {
+      setResetError('El RUC ingresado no coincide con el RUC de la empresa.');
+      return;
+    }
+    
+    try {
+      setResetting(true);
+      await dbService.resetCompanyData(companyToReset.id);
+      setSuccess(`La base de datos de la empresa "${companyToReset.razonSocial}" ha sido restablecida a cero con éxito.`);
+      setResetDialogOpen(false);
+      setCompanyToReset(null);
+      setConfirmRucInput('');
+      
+      // If we are currently impersonating this company, stop impersonating
+      if (activeCompany && activeCompany.id === companyToReset.id) {
+        handleStopImpersonating();
+      }
+      
+      await loadSaaSData();
+    } catch (err: any) {
+      setResetError(err.message || 'Error al restablecer la empresa.');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -838,6 +877,24 @@ export function SuperAdminModule() {
                         
                         <button
                           onClick={() => {
+                            setCompanyToReset(emp);
+                            setConfirmRucInput('');
+                            setResetError('');
+                            setResetDialogOpen(true);
+                          }}
+                          disabled={emp.ruc === '20601234567'}
+                          className={`flex items-center gap-1 scale-90 px-2 py-1 rounded-md text-xs font-semibold border cursor-pointer outline-none transition-colors ${
+                            emp.ruc === '20601234567'
+                              ? 'border-slate-850 bg-slate-900 text-slate-600 cursor-not-allowed opacity-50'
+                              : 'border-amber-500/30 bg-amber-950/20 text-amber-500 hover:bg-amber-600 hover:text-white'
+                          }`}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Puesta a Cero
+                        </button>
+
+                        <button
+                          onClick={() => {
                             setCompanyToDelete(emp);
                             setConfirmEmailInput('');
                             setDeleteError('');
@@ -1029,7 +1086,7 @@ export function SuperAdminModule() {
             <span className="font-bold text-primary flex items-center gap-1 text-[11px]">
               <Sparkles className="w-3.5 h-3.5" /> Aprovisionamiento SaaS
             </span>
-            <span>Este formulario creará automáticamente una nueva empresa (tenant), registrará un usuario administrador asignado a ella y creará una cuenta corriente BCP inicial en Soles con S/. 5,000.00 de fondo de simulación.</span>
+            <span>Este formulario creará automáticamente una nueva empresa (tenant), registrará un usuario administrador asignado a ella y creará una cuenta corriente BCP inicial en Soles con S/. 0.00 de fondo inicial.</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1230,6 +1287,63 @@ export function SuperAdminModule() {
               className="bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-30 disabled:hover:bg-red-600"
             >
               Confirmar Eliminación
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* --- DIALOG: PUESTA A CERO DE EMPRESA --- */}
+      <Dialog
+        isOpen={resetDialogOpen}
+        onClose={() => setResetDialogOpen(false)}
+        title="Puesta a Cero de Empresa"
+      >
+        <form onSubmit={handleResetCompanyDataSubmit} className="flex flex-col gap-4 mt-2">
+          
+          <Alert variant="danger" className="flex flex-col gap-2 border-red-800/50 bg-red-950/40 text-red-200">
+            <div className="flex items-center gap-2 font-bold">
+              <AlertTriangle className="w-5 h-5 text-amber-500 animate-pulse" />
+              <span>¡ATENCIÓN: OPERACIÓN DE ALTO RIESGO!</span>
+            </div>
+            <span className="text-xs">
+              Estás a punto de **restablecer a cero** toda la información contable y transaccional de **{companyToReset?.razonSocial}**. Esta acción borrará permanentemente facturas, compras, inventarios, movimientos, trabajadores y contactos. Las cuentas de banco asociadas serán reseteadas a **S/. 0.00**. **Esta operación es irreversible.**
+            </span>
+          </Alert>
+
+          {resetError && <Alert variant="danger">{resetError}</Alert>}
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-400">
+              PARA CONFIRMAR, ESCRIBE EL RUC DE LA EMPRESA:
+            </label>
+            <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs font-mono text-primary select-all font-bold">
+              {companyToReset?.ruc}
+            </div>
+            <Input
+              type="text"
+              placeholder="Ingresa el RUC de la empresa"
+              value={confirmRucInput}
+              onChange={e => setConfirmRucInput(e.target.value)}
+              required
+              className="bg-slate-950 border-slate-800 focus:border-red-500 text-white mt-1.5 font-mono"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-800 pt-4 mt-2">
+            <Button 
+              type="button" 
+              onClick={() => setResetDialogOpen(false)}
+              className="bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800 font-semibold"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={confirmRucInput.trim() !== companyToReset?.ruc.trim() || resetting}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-30 disabled:hover:bg-amber-600 flex items-center gap-1.5"
+            >
+              {resetting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              Restablecer a Cero
             </Button>
           </div>
         </form>

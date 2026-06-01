@@ -1038,10 +1038,27 @@ export const authService = {
     users.push(newUser);
     storageEngine.saveCollection('usuarios', users);
 
+    // Preload bank account for the new company with S/. 0.00
+    const bankId = `bnk_${Date.now()}`;
+    const banks = storageEngine.getCollection<Banco>('bancos');
+    const newBank: Banco = {
+      id: bankId,
+      empresaId: newCompanyId,
+      banco: 'BCP',
+      tipoCuenta: 'corriente',
+      numeroCuenta: `191-${Math.floor(10000000 + Math.random() * 90000000)}-0-01`,
+      moneda: 'PEN',
+      saldoActual: 0.00,
+      cci: `002-191-00${Math.floor(100000000000 + Math.random() * 900000000000)}-01`
+    };
+    banks.push(newBank);
+    storageEngine.saveCollection('bancos', banks);
+
     // Synchronize to Firestore
     try {
       await setDoc(doc(db, 'empresas', newCompanyId), newCompany);
       await setDoc(doc(db, 'usuarios', uid), newUser);
+      await setDoc(doc(db, 'bancos', bankId), newBank);
     } catch (err) {
       console.warn('[Firestore Sync Warning] register failed to sync cloud:', err);
     }
@@ -1317,7 +1334,8 @@ export const dbService = {
       tipoCuenta: 'corriente',
       numeroCuenta: `191-${Math.floor(10000000 + Math.random() * 90000000)}-0-01`,
       moneda: 'PEN',
-      saldoActual: 5000.00
+      saldoActual: 0.00,
+      cci: `002-191-00${Math.floor(100000000000 + Math.random() * 900000000000)}-01`
     };
     banks.push(newBank);
     storageEngine.saveCollection('bancos', banks);
@@ -1471,6 +1489,71 @@ export const dbService = {
         bancos[idx].saldoActual = parseFloat((bancos[idx].saldoActual + mov.monto * factor).toFixed(2));
         storageEngine.saveCollection('bancos', bancos);
       }
+    }
+  },
+
+  resetCompanyData: async (empresaId: string): Promise<void> => {
+    if (!empresaId) return;
+
+    // Safety lock: demo company RUC 20601234567 (Inversiones Perú) must NEVER be allowed to be reset!
+    const companies = storageEngine.getCollection<Empresa>('empresas');
+    const targetComp = companies.find(c => c.id === empresaId);
+    if (targetComp && targetComp.ruc === '20601234567') {
+      throw new Error('La empresa de demostración principal (Inversiones Perú S.A.C.) no puede ser restablecida para preservar los datos de demostración del sistema.');
+    }
+
+    // 1. Reset LocalStorage for all transactional collections
+    const collectionsToClear = [
+      'clientes', 
+      'proveedores', 
+      'movimientos', 
+      'facturas', 
+      'compras', 
+      'productos', 
+      'kardex', 
+      'trabajadores'
+    ];
+
+    for (const coll of collectionsToClear) {
+      const list = storageEngine.getCollection<any>(coll);
+      const filtered = list.filter(item => item.empresaId !== empresaId);
+      storageEngine.saveCollection(coll, filtered);
+    }
+
+    // 2. Set current bank balance to exactly 0.00
+    const bankList = storageEngine.getCollection<Banco>('bancos');
+    const resetBanks = bankList.map(bank => {
+      if (bank.empresaId === empresaId) {
+        return { ...bank, saldoActual: 0.00 };
+      }
+      return bank;
+    });
+    storageEngine.saveCollection('bancos', resetBanks);
+
+    // 3. Clear/Reset from Cloud Firestore
+    try {
+      for (const collName of collectionsToClear) {
+        const q = query(collection(db, collName), where('empresaId', '==', empresaId));
+        const querySnapshot = await getDocs(q);
+        const deletePromises: Promise<void>[] = [];
+        querySnapshot.forEach((docSnapshot) => {
+          deletePromises.push(deleteDoc(doc(db, collName, docSnapshot.id)));
+        });
+        await Promise.all(deletePromises);
+      }
+
+      // Update bancos on Cloud Firestore
+      const bankQ = query(collection(db, 'bancos'), where('empresaId', '==', empresaId));
+      const bankSnapshot = await getDocs(bankQ);
+      const bankPromises: Promise<void>[] = [];
+      bankSnapshot.forEach((docSnapshot) => {
+        bankPromises.push(updateDoc(doc(db, 'bancos', docSnapshot.id), { saldoActual: 0.00 }));
+      });
+      await Promise.all(bankPromises);
+
+      console.log(`[Reset] Successfully reset all cloud and local collections for company: ${empresaId}`);
+    } catch (err) {
+      console.warn('[Firestore Reset Warning] Failed to completely reset Cloud Firestore data:', err);
     }
   }
 };

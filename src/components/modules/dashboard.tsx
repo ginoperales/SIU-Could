@@ -156,7 +156,8 @@ export function DashboardModule() {
         tipoCuenta: 'corriente',
         numeroCuenta: `191-${Math.floor(10000000 + Math.random() * 90000000)}-0-01`,
         moneda: 'PEN',
-        saldoActual: 5000.00
+        saldoActual: 0.00,
+        cci: `002-191-00${Math.floor(100000000000 + Math.random() * 900000000000)}-01`
       });
 
       // 3. Update User's empresasAsociadas list
