@@ -1451,25 +1451,9 @@ export const bootstrapSuperAdmin = async () => {
       estado: 'activo'
     };
     
-    // 1. Bootstrap Gin Super Admin
+    // 1. Static Bootstrap for Gin Super Admin
     const emailGin = 'gin.zu.ken@gmail.com';
-    const passGin = 'gin_perales26';
-    let uidGin = 'usr_superadmin';
-    
-    console.log('[Bootstrap] Registering Gin in Firebase Auth...');
-    try {
-      const creds = await createUserWithEmailAndPassword(auth, emailGin, passGin);
-      uidGin = creds.user.uid;
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        try {
-          const creds = await signInWithEmailAndPassword(auth, emailGin, passGin);
-          uidGin = creds.user.uid;
-        } catch (loginErr) {
-          console.warn('[Bootstrap] Gin Auth check error:', loginErr);
-        }
-      }
-    }
+    const uidGin = 'usr_superadmin';
     
     const superAdminUser: Usuario = {
       id: uidGin,
@@ -1481,25 +1465,9 @@ export const bootstrapSuperAdmin = async () => {
       fechaRegistro: new Date().toISOString()
     };
     
-    // 2. Bootstrap Harold Admin
+    // 2. Static Bootstrap for Harold Admin
     const emailHarold = 'harold.20guerra17@gmail.com';
-    const passHarold = 'harold2026';
-    let uidHarold = 'usr_harold_admin';
-    
-    console.log('[Bootstrap] Registering Harold in Firebase Auth...');
-    try {
-      const creds = await createUserWithEmailAndPassword(auth, emailHarold, passHarold);
-      uidHarold = creds.user.uid;
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        try {
-          const creds = await signInWithEmailAndPassword(auth, emailHarold, passHarold);
-          uidHarold = creds.user.uid;
-        } catch (loginErr) {
-          console.warn('[Bootstrap] Harold Auth check error:', loginErr);
-        }
-      }
-    }
+    const uidHarold = 'usr_harold_admin';
     
     const haroldUser: Usuario = {
       id: uidHarold,
@@ -1520,7 +1488,7 @@ export const bootstrapSuperAdmin = async () => {
     }
     storageEngine.saveCollection('usuarios', users);
     
-    // 4. Silent sync to Cloud Firestore (prevents crashes from regional or rule restrictions)
+    // 4. Silent sync to Cloud Firestore
     try {
       await setDoc(doc(db, 'empresas', masterCompanyId), masterCompany);
       await setDoc(doc(db, 'usuarios', uidGin), superAdminUser);
