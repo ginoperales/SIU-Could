@@ -26,7 +26,7 @@ import { SuperAdminModule } from '../components/modules/superadmin';
 import { ConfiguracionModule } from '../components/modules/configuracion';
 import { TiendaAppsModule } from '../components/modules/tienda-apps';
 
-import { Calculator } from 'lucide-react';
+import { Calculator, AlertTriangle } from 'lucide-react';
 import { bootstrapSuperAdmin } from '../core/services/firebase';
 
 export default function Home() {
@@ -105,6 +105,28 @@ export default function Home() {
 
         {/* Dynamic Scrollable Panel Content */}
         <main className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950/20">
+          
+          {company && company.estado === 'pendiente_validacion' && (
+            <div className="mb-6 p-4 rounded-xl border border-amber-500/20 bg-amber-950/40 text-amber-200 flex items-center justify-between shadow-lg shadow-amber-950/20 animate-pulse-slow">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-500/20 p-2 rounded-lg text-amber-400">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold">Funcionalidades en Modo Lectura (Pendiente de Validación)</span>
+                  <span className="text-xs text-amber-300/80 mt-0.5">
+                    Su cuenta se encuentra en proceso de validación. Puede navegar por todos los módulos del ERP, pero las operaciones de registro, edición y eliminación están bloqueadas. <strong>Póngase en contacto con el Super Administrador</strong> para la validación definitiva de su empresa.
+                  </span>
+                </div>
+              </div>
+              <a 
+                href={`mailto:gerente@inverperu.com.pe?subject=Validacion de Cuenta ContaCloud - RUC ${company.ruc}`}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors inline-block shrink-0 shadow-lg shadow-amber-500/10 cursor-pointer"
+              >
+                Contactar Soporte
+              </a>
+            </div>
+          )}
           
           {/* Active Tab Router Switching */}
           {activeTab === 'superadmin' && <SuperAdminModule />}

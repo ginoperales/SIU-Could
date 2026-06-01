@@ -1000,6 +1000,11 @@ export const authService = {
 
     // Create new company
     const newCompanyId = `emp_${Date.now()}`;
+    
+    const defaultFuncs = plan === 'Plan Corporativo' 
+      ? ['caja', 'bancos', 'clientes', 'proveedores', 'compras', 'ventas', 'por-cobrar', 'por-pagar', 'inventario', 'rrhh', 'reportes', 'ia']
+      : ['caja', 'bancos', 'clientes', 'proveedores', 'compras', 'ventas', 'inventario'];
+
     const newCompany: Empresa = {
       id: newCompanyId,
       razonSocial,
@@ -1008,11 +1013,13 @@ export const authService = {
       direccion: 'Dirección Comercial Registrada, Lima, Perú',
       email,
       fechaCreacion: new Date().toISOString(),
-      estado: 'activo',
+      estado: 'pendiente_validacion',
       plan,
       cuponDescuento,
       porcentajeDescuento,
-      costoMensual
+      costoMensual,
+      funcionalidadesHabilitadas: defaultFuncs,
+      rubro: 'Comercio'
     };
     companies.push(newCompany);
     storageEngine.saveCollection('empresas', companies);
@@ -1065,6 +1072,34 @@ export const authService = {
 };
 
 export const dbService = {
+  checkCompanyValidation: (empresaId: string) => {
+    if (!empresaId) return;
+    if (empresaId === 'empresa_demo_peru') return;
+    
+    // Bypass check if the current user is a Super Admin
+    if (typeof window !== 'undefined') {
+      const sessionStr = localStorage.getItem('sv_auth_session');
+      if (sessionStr) {
+        try {
+          const session = JSON.parse(sessionStr);
+          const users = storageEngine.getCollection<Usuario>('usuarios');
+          const currentUser = users.find(u => u.id === session.uid);
+          if (currentUser && currentUser.rol === 'Super Administrador') {
+            return; // Bypass!
+          }
+        } catch (e) {
+          console.warn('Error reading auth session inside validation check:', e);
+        }
+      }
+    }
+    
+    const companies = storageEngine.getCollection<Empresa>('empresas');
+    const company = companies.find(c => c.id === empresaId);
+    if (company && company.estado === 'pendiente_validacion') {
+      throw new Error('Su cuenta está pendiente de validación por el Super Administrador. Las operaciones de registro, edición y eliminación están bloqueadas temporalmente.');
+    }
+  },
+
   getDocuments: async <T>(collection: string, empresaId: string): Promise<T[]> => {
     const list = storageEngine.getCollection<any>(collection);
     // Mandatory filter: only return documents for the specified company
@@ -1080,6 +1115,10 @@ export const dbService = {
     collectionName: string, 
     data: Omit<T, 'id'>
   ): Promise<T> => {
+    if (data.empresaId) {
+      dbService.checkCompanyValidation(data.empresaId);
+    }
+    
     const list = storageEngine.getCollection<any>(collectionName);
     const newDocId = `${collectionName.slice(0, 3)}_${Date.now()}`;
     const newDoc = {
@@ -1113,6 +1152,11 @@ export const dbService = {
     const list = storageEngine.getCollection<any>(collectionName);
     const index = list.findIndex(item => item.id === id);
     if (index !== -1) {
+      const docToUpdate = list[index];
+      if (docToUpdate && docToUpdate.empresaId && collectionName !== 'empresas') {
+        dbService.checkCompanyValidation(docToUpdate.empresaId);
+      }
+      
       list[index] = { ...list[index], ...data };
       storageEngine.saveCollection(collectionName, list);
       
@@ -1128,6 +1172,11 @@ export const dbService = {
 
   deleteDocument: async (collectionName: string, id: string): Promise<void> => {
     const list = storageEngine.getCollection<any>(collectionName);
+    const docToDelete = list.find(item => item.id === id);
+    if (docToDelete && docToDelete.empresaId && collectionName !== 'empresas') {
+      dbService.checkCompanyValidation(docToDelete.empresaId);
+    }
+    
     const filtered = list.filter(item => item.id !== id);
     storageEngine.saveCollection(collectionName, filtered);
     
@@ -1219,6 +1268,10 @@ export const dbService = {
   ): Promise<Empresa> => {
     const companies = storageEngine.getCollection<Empresa>('empresas');
     const newCompanyId = `emp_${Date.now()}`;
+    const defaultFuncs = plan === 'Plan Corporativo' 
+      ? ['caja', 'bancos', 'clientes', 'proveedores', 'compras', 'ventas', 'por-cobrar', 'por-pagar', 'inventario', 'rrhh', 'reportes', 'ia']
+      : ['caja', 'bancos', 'clientes', 'proveedores', 'compras', 'ventas', 'inventario'];
+
     const newCompany: Empresa = {
       id: newCompanyId,
       razonSocial,
@@ -1231,7 +1284,9 @@ export const dbService = {
       plan,
       cuponDescuento,
       porcentajeDescuento,
-      costoMensual
+      costoMensual,
+      funcionalidadesHabilitadas: defaultFuncs,
+      rubro: 'Comercio'
     };
     
     companies.push(newCompany);

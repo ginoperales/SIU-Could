@@ -50,7 +50,7 @@ export function SuperAdminModule() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [userSearchTerm, setUserSearchTerm] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'empresas' | 'usuarios' | 'promociones' | 'tienda-apps-admin'>('empresas');
+  const [activeSubTab, setActiveSubTab] = useState<'empresas' | 'usuarios' | 'promociones' | 'tienda-apps-admin' | 'solicitudes'>('empresas');
 
   // Delete User Dialog
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
@@ -702,13 +702,13 @@ export function SuperAdminModule() {
         </Card>
       </div>
 
-      {/* Main Tab Panel */}
       <Tabs 
         tabs={[
           { id: 'empresas', label: 'Directorio de Tenants' },
           { id: 'usuarios', label: 'Usuarios del SaaS' },
           { id: 'promociones', label: 'Promociones & Descuentos' },
-          { id: 'tienda-apps-admin', label: 'Tienda de Apps (Admin)' }
+          { id: 'tienda-apps-admin', label: 'Tienda de Apps (Admin)' },
+          { id: 'solicitudes', label: 'Solicitudes y Notificaciones' }
         ]}
         activeTab={activeSubTab}
         onChange={(v: any) => setActiveSubTab(v)}
@@ -780,8 +780,16 @@ export function SuperAdminModule() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={emp.estado === 'activo' ? 'success' : 'danger'}>
-                          {emp.estado === 'activo' ? 'Activo' : 'Suspendido'}
+                        <Badge 
+                          variant={
+                            emp.estado === 'activo' ? 'success' : 
+                            emp.estado === 'pendiente_validacion' ? 'warning' : 'danger'
+                          }
+                        >
+                          {
+                            emp.estado === 'activo' ? 'Activo' : 
+                            emp.estado === 'pendiente_validacion' ? 'Pendiente' : 'Suspendido'
+                          }
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right flex justify-end gap-2">
@@ -1548,6 +1556,145 @@ export function SuperAdminModule() {
           </div>
         </Card>
       )}
+
+      {/* Tab: Centro de Solicitudes y Notificaciones */}
+      {activeSubTab === 'solicitudes' && (() => {
+        const pendingEmpresas = empresas.filter(e => e.estado === 'pendiente_validacion');
+        
+        const handleApproveCompany = async (emp: Empresa) => {
+          try {
+            setLoading(true);
+            await dbService.updateDocument('empresas', emp.id, { estado: 'activo' });
+            setSuccess(`Empresa "${emp.razonSocial}" aprobada y validada con éxito. Se han activado y desbloqueado todas sus funcionalidades contables en la base de datos.`);
+            await loadSaaSData();
+            setTimeout(() => setSuccess(''), 5000);
+          } catch (err: any) {
+            setError(err.message || 'Error al aprobar la empresa.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        const handleRejectCompany = async (emp: Empresa) => {
+          if (!window.confirm(`¿Estás seguro de rechazar y suspender la solicitud de "${emp.razonSocial}"?`)) return;
+          try {
+            setLoading(true);
+            await dbService.updateDocument('empresas', emp.id, { estado: 'suspendido' });
+            setSuccess(`Solicitud de la empresa "${emp.razonSocial}" rechazada. Su estado ha sido marcado como SUSPENDIDO.`);
+            await loadSaaSData();
+            setTimeout(() => setSuccess(''), 5000);
+          } catch (err: any) {
+            setError(err.message || 'Error al rechazar la empresa.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        return (
+          <Card className="p-6 border border-slate-200 dark:border-slate-800 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-amber-500 animate-pulse" />
+                  Bandeja de Solicitudes Pendientes de Validación
+                </span>
+                <p className="text-xs text-slate-500 mt-1">
+                  Aquí aparecen los nuevos autoregistros del SaaS que requieren confirmación para desbloquear sus operaciones transaccionales.
+                </p>
+              </div>
+              <Badge variant={pendingEmpresas.length > 0 ? 'warning' : 'success'} className="px-3 py-1 font-bold">
+                {pendingEmpresas.length} Pendientes
+              </Badge>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-8 text-slate-500">Procesando base de datos...</div>
+            ) : pendingEmpresas.length === 0 ? (
+              <div className="text-center py-12 bg-slate-950/20 border border-slate-850 rounded-xl flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xl">
+                  ✓
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-bold text-slate-200">¡Bandeja al día!</span>
+                  <span className="text-xs text-slate-500">No hay nuevas empresas pendientes de validación.</span>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {pendingEmpresas.map(emp => {
+                  const companyAdmin = usuarios.find(u => u.empresaId === emp.id && u.rol === 'Administrador');
+                  return (
+                    <Card 
+                      key={emp.id}
+                      className="p-5 border border-amber-500/10 bg-gradient-to-br from-amber-500/[0.02] to-transparent flex flex-col gap-4 hover:border-amber-500/30 transition-all shadow-md shadow-slate-950/20 relative group animate-slide-up"
+                    >
+                      {/* Floating Indicator */}
+                      <span className="absolute top-4 right-4 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+
+                      {/* Info Row */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-4 h-4 text-amber-500" />
+                          <span className="font-bold text-sm text-slate-100">{emp.razonSocial}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-1 text-xs">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">RUC (SUNAT)</span>
+                            <span className="font-mono text-slate-300 font-semibold">{emp.ruc}</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Plan Contratado</span>
+                            <span className="text-slate-300 font-semibold">{emp.plan || 'Plan Emprendedor'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="w-full h-[1px] bg-slate-800/80" />
+
+                      {/* Admin contact info */}
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Administrador de Cuenta</span>
+                        <div className="bg-slate-950 border border-slate-850 rounded-lg p-2.5 flex items-start gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0">
+                            {companyAdmin ? companyAdmin.nombre.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div className="flex flex-col overflow-hidden text-xs">
+                            <span className="font-bold text-slate-200 truncate">{companyAdmin ? companyAdmin.nombre : 'Usuario Admin'}</span>
+                            <span className="text-[10px] text-slate-500 font-mono truncate">{emp.email}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 mt-2 w-full pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectCompany(emp)}
+                          className="flex-1 py-2 text-xs font-bold rounded-lg border border-red-500/20 bg-red-950/10 text-red-400 hover:bg-red-950/30 hover:border-red-500/40 cursor-pointer outline-none transition-all"
+                        >
+                          Rechazar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveCompany(emp)}
+                          className="flex-[2] py-2 text-xs font-bold rounded-lg bg-gradient-to-tr from-amber-600 to-amber-500 text-white hover:from-amber-500 hover:to-amber-400 cursor-pointer outline-none transition-all shadow-md shadow-amber-500/10 flex items-center justify-center gap-1"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          Validar y Activar ERP
+                        </button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* --- DIALOG: CREAR PROMOCION --- */}
       <Dialog

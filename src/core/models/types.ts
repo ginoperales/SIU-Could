@@ -8,7 +8,7 @@ export interface Empresa {
   email: string;
   logo?: string;
   fechaCreacion: string;
-  estado: 'activo' | 'suspendido' | 'inactivo';
+  estado: 'activo' | 'suspendido' | 'inactivo' | 'pendiente_validacion';
   latitud?: number;
   longitud?: number;
   plan?: string;
