@@ -1,5 +1,5 @@
 {
-  "name": "sv-contabilidad-erp",
+  "name": "contacould",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,9 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/animejs": "^3.1.13",
+    "@types/three": "^0.184.1",
+    "animejs": "^4.4.1",
+    "firebase": "^12.14.0",
+    "lucide-react": "^1.17.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Is the user authenticated?
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Get current user's profile data
+    function getUsuarioData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Helper: Does the user belong to the given company?
+    function perteneceAEmpresa(empresaId) {
+      return isAuthenticated() && getUsuarioData().empresaId == empresaId;
+    }
+
+    // Rules for Empresa collection
+    match /empresas/{empresaId} {
+      allow create: if isAuthenticated();
+      allow read, update: if perteneceAEmpresa(empresaId);
+      allow delete: if perteneceAEmpresa(empresaId) && getUsuarioData().rol == 'Super Administrador';
+    }
+
+    // Rules for Usuarios collection
+    match /usuarios/{usuarioId} {
+      allow create: if isAuthenticated();
+      allow read, update: if isAuthenticated() && (request.auth.uid == usuarioId || getUsuarioData().empresaId == resource.data.empresaId);
+      allow delete: if isAuthenticated() && getUsuarioData().empresaId == resource.data.empresaId && getUsuarioData().rol == 'Administrador';
+    }
+
+    // Rules for Promociones collection (global SaaS promo codes)
+    match /promociones/{promoId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && getUsuarioData().rol == 'Super Administrador';
+    }
+
+    // Generic rule for multi-tenant collections: documents MUST have an empresaId
+    // and the user must belong to that company.
+    // This applies to: clientes, proveedores, movimientos, facturas, compras, bancos, productos, kardex, trabajadores
+    match /{collectionName}/{docId} {
+      allow read, write: if isAuthenticated() && 
+        ((resource != null && perteneceAEmpresa(resource.data.empresaId)) || 
+         (request.resource != null && perteneceAEmpresa(request.resource.data.empresaId)));
+    }
+  }
+}
